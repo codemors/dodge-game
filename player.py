@@ -73,13 +73,17 @@ class Player(pygame.sprite.Sprite):
             -self.rect.height * (1 - settings.PLAYER_HITBOX_SHRINK),
         )
 
-    def update(self, keys, dt):
+    def update(self, keys, dt, axis=0.0):
         # Use this player's own key bindings.
         direction = 0
         if any(keys[k] for k in self.left_keys):
             direction -= 1
         if any(keys[k] for k in self.right_keys):
             direction += 1
+        # A connected controller's horizontal axis (-1..+1) adds to / overrides
+        # the keyboard so the stick and D-pad both steer the player.
+        if abs(axis) > 0.2 and direction == 0:
+            direction = 1 if axis > 0 else -1
 
         self.x += direction * settings.PLAYER_SPEED * dt
         # Clamp to screen bounds.

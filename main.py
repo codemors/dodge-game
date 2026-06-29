@@ -312,6 +312,49 @@ def main():
     pygame.init()
     pygame.display.set_caption(settings.TITLE)
 
+    # --- game controllers (joysticks / gamepads, e.g. DUALSHOCK 4) ----------
+    # Detected controllers steer the players: in 2-player mode pad #0 drives the
+    # arrow-key player and pad #1 the A/D player; in 1-player mode pad #0 drives
+    # the single player. The D-pad/stick + face buttons also navigate the menus.
+    pygame.joystick.init()
+    joysticks = {}  # instance_id -> Joystick
+
+    def refresh_joysticks():
+        joysticks.clear()
+        for i in range(pygame.joystick.get_count()):
+            j = pygame.joystick.Joystick(i)
+            j.init()
+            joysticks[j.get_instance_id()] = j
+
+    def joystick_list():
+        """Connected controllers ordered by device index (stable assignment)."""
+        return [joysticks[k] for k in sorted(joysticks)]
+
+    # On the Xbox One S controller (macOS) the D-pad reports as buttons 13 (left)
+    # and 14 (right) rather than a hat, so read both routes for steering.
+    DPAD_LEFT_BTN, DPAD_RIGHT_BTN = 13, 14
+
+    def pad_axis(pad):
+        """Horizontal steering for one controller: left stick X + D-pad."""
+        if pad is None:
+            return 0.0
+        x = 0.0
+        if pad.get_numaxes() > 0:
+            x = pad.get_axis(0)            # left stick, horizontal
+        if pad.get_numhats() > 0:
+            hx = pad.get_hat(0)[0]         # D-pad as a hat (-1/0/+1)
+            if hx:
+                x = float(hx)
+        # D-pad exposed as discrete buttons (Xbox One S on macOS)
+        nb = pad.get_numbuttons()
+        if nb > DPAD_LEFT_BTN and pad.get_button(DPAD_LEFT_BTN):
+            x = -1.0
+        if nb > DPAD_RIGHT_BTN and pad.get_button(DPAD_RIGHT_BTN):
+            x = 1.0
+        return x
+
+    refresh_joysticks()
+
     # background music for the lobby (menu) and the game-over screen
     import os
     from assets_loader import _assets_dir
@@ -517,6 +560,73 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
 
+            elif event.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
+                refresh_joysticks()   # controller plugged in / removed mid-game
+
+            elif event.type == pygame.JOYHATMOTION:
+                # D-pad navigates menus (up/down to move, left/right to adjust)
+                hx, hy = event.value
+                if state == MENU:
+                    if hy > 0:
+                        menu_index = (menu_index - 1) % len(MENU_ITEMS)
+                    elif hy < 0:
+                        menu_index = (menu_index + 1) % len(MENU_ITEMS)
+                elif state == SETTINGS:
+                    if hy > 0:
+                        settings_index = (settings_index - 1) % len(SETTINGS_ITEMS)
+                    elif hy < 0:
+                        settings_index = (settings_index + 1) % len(SETTINGS_ITEMS)
+                    elif hx < 0:
+                        adjust_settings(-1)
+                    elif hx > 0:
+                        adjust_settings(+1)
+                elif state == PAUSED:
+                    if hy > 0:
+                        pause_index = (pause_index - 1) % len(PAUSE_ITEMS)
+                    elif hy < 0:
+                        pause_index = (pause_index + 1) % len(PAUSE_ITEMS)
+
+            elif event.type == pygame.JOYBUTTONDOWN:
+                # D-pad reports as buttons 11/12/13/14 (up/down/left/right) on the
+                # Xbox One S — use them to navigate menus; any other button confirms.
+                b = event.button
+                DPAD = (11, 12, 13, 14)
+                if b in DPAD:
+                    if state == MENU:
+                        if b == 11:
+                            menu_index = (menu_index - 1) % len(MENU_ITEMS)
+                        elif b == 12:
+                            menu_index = (menu_index + 1) % len(MENU_ITEMS)
+                    elif state == SETTINGS:
+                        if b == 11:
+                            settings_index = (settings_index - 1) % len(SETTINGS_ITEMS)
+                        elif b == 12:
+                            settings_index = (settings_index + 1) % len(SETTINGS_ITEMS)
+                        elif b == 13:
+                            adjust_settings(-1)
+                        elif b == 14:
+                            adjust_settings(+1)
+                    elif state == PAUSED:
+                        if b == 11:
+                            pause_index = (pause_index - 1) % len(PAUSE_ITEMS)
+                        elif b == 12:
+                            pause_index = (pause_index + 1) % len(PAUSE_ITEMS)
+                    # in PLAYING the D-pad steers via pad_axis(), not here
+                else:
+                    # any face/shoulder button = "select"/"confirm"
+                    if state == MENU:
+                        running = choose_menu()
+                    elif state == SETTINGS:
+                        choose_settings()
+                    elif state == PAUSED:
+                        choose_pause()
+                    elif state == PLAYING:
+                        state = PAUSED
+                        pause_index = 0
+                    elif state == GAME_OVER:
+                        start_game(num_players)
+                        state = PLAYING
+
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_F11:
                     toggle_fullscreen()
@@ -697,9 +807,13 @@ def main():
                 item.update(dt)
             effects.update(dt)
 
+            pads = joystick_list()
             living = [p for p in players if p.alive]
             for p in living:
-                p.update(keys, dt)
+                # P1 (arrows) -> pad #0, P2 (A/D) -> pad #1; 1 player -> pad #0
+                pad_idx = players.index(p)
+                pad = pads[pad_idx] if pad_idx < len(pads) else None
+                p.update(keys, dt, axis=pad_axis(pad))
 
                 phit = p.hitbox
                 struck = [obs for obs in obstacles
