@@ -1,0 +1,9 @@
+# Runtime — needed to play the game and build the exe:
+pygame-ce>=2.5.7
+pyinstaller>=6.21.0
+python-bidi>=0.6.10        # correct right-to-left (Hebrew) text display
+
+# Asset prep only (NOT needed to run the game) — used once to cut the sprite
+# backgrounds out of the source images with an AI background remover:
+# rembg[cpu]>=2.0.76
+# onnxruntime>=1.27.0
