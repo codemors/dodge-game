@@ -27,14 +27,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build exe
+      - name: Build exe (windowed)
         run: pyinstaller --onefile --windowed --name "HaNitzachonHaAmiti" --add-data "assets;assets" main.py
+
+      - name: Build exe (console / diagnostic)
+        # Same game, but keeps a console window so any crash traceback is visible.
+        run: pyinstaller --onefile --console --name "HaNitzachonHaAmiti-debug" --add-data "assets;assets" main.py
 
       - name: Upload exe artifact
         uses: actions/upload-artifact@v4
         with:
           name: HaNitzachonHaAmiti-windows
-          path: dist/HaNitzachonHaAmiti.exe
+          path: |
+            dist/HaNitzachonHaAmiti.exe
+            dist/HaNitzachonHaAmiti-debug.exe
           if-no-files-found: error
 
       # On a version tag (e.g. v1.0.0) also publish the exe to a Release.

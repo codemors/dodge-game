@@ -3,6 +3,7 @@
 מצבים: תפריט -> משחק -> סיום (-> חזרה לתפריט). הקצב מתגבר לאט עם הזמן, עם תקרה.
 """
 
+import os
 import random
 
 import math
@@ -1056,5 +1057,31 @@ def main():
     pygame.quit()
 
 
+def _run_with_crash_log():
+    """Run the game; on any crash write the full traceback to crash_log.txt next
+    to the exe (and the home folder) so failures on a packaged build are visible
+    even without a console window."""
+    import sys
+    import traceback
+    try:
+        main()
+    except BaseException:
+        tb = traceback.format_exc()
+        for base in (os.path.dirname(os.path.abspath(sys.argv[0])),
+                     os.path.expanduser("~")):
+            try:
+                with open(os.path.join(base, "crash_log.txt"), "w",
+                          encoding="utf-8") as fh:
+                    fh.write(tb)
+            except OSError:
+                continue
+        # also try to surface it in a console if one exists
+        try:
+            print(tb, file=sys.stderr)
+        except Exception:
+            pass
+        raise
+
+
 if __name__ == "__main__":
-    main()
+    _run_with_crash_log()
