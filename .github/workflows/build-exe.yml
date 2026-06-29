@@ -1,0 +1,45 @@
+name: Build Windows EXE
+
+# Build the standalone Windows .exe on a Windows runner.
+# Trigger it manually from the Actions tab, on every push to main, or by
+# pushing a version tag (which also publishes the exe to a GitHub Release).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build exe
+        run: pyinstaller --onefile --windowed --name "HaNitzachonHaAmiti" --add-data "assets;assets" main.py
+
+      - name: Upload exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HaNitzachonHaAmiti-windows
+          path: dist/HaNitzachonHaAmiti.exe
+          if-no-files-found: error
+
+      # On a version tag (e.g. v1.0.0) also publish the exe to a Release.
+      - name: Publish to Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/HaNitzachonHaAmiti.exe
