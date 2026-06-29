@@ -1,5 +1,5 @@
-"""Falling obstacles (יצר הרע). Each one is a random dark shape from a set of
-six variants, so the falling evil elements look varied instead of identical.
+"""Falling obstacles (יצר הרע). Each one is a random dark sprite from a set of
+seven variants, so the falling evil elements look varied instead of identical.
 Spawn at a random x along the top and fall straight down."""
 
 import os
@@ -10,7 +10,7 @@ import pygame
 import settings
 from assets_loader import _assets_dir, load_sprite
 
-# The six evil-shape variants (obstacle1.png … obstacle6.png). Loaded once and
+# The seven evil-shape variants (obstacle1.png … obstacle7.png). Loaded once and
 # shared across all obstacles. Each is scaled to fit the obstacle box while
 # preserving its own aspect ratio (the shapes are not all the same proportions).
 _VARIANTS = None
@@ -32,7 +32,7 @@ def _get_variants():
                round(settings.OBSTACLE_SIZE[1] * 0.7225))
         adir = _assets_dir()
         variants = []
-        for i in range(1, 7):
+        for i in range(1, 8):
             path = os.path.join(adir, f"obstacle{i}.png")
             if os.path.exists(path):
                 try:
