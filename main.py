@@ -25,14 +25,12 @@ PLAYING = "playing"
 PAUSED = "paused"
 GAME_OVER = "game_over"
 SETTINGS = "settings"        # תפריט הגדרות מוזיקה/אפקטים
-DEBUG = "debug"              # מסך בדיקת שלטים (controller diagnostics)
 
 # פריטי התפריט הראשי: (תווית בעברית, מספר שחקנים / פעולה)
 MENU_ITEMS = [
     ("שחקן אחד", 1),
     ("שני שחקנים", 2),
     ("מוזיקה", "settings"),    # opens the audio-settings submenu
-    ("בדיקת שלט", "debug"),    # opens the controller-diagnostics screen
     ("יציאה", "quit"),
 ]
 
@@ -364,53 +362,6 @@ def main():
             x = 1.0
         return x
 
-    def controller_report():
-        """A full text snapshot of every connected controller and its live
-        state — names, axes, buttons, hats, and the computed steering value."""
-        import platform
-        pygame.event.pump()   # make sure states are fresh
-        lines = [
-            "=== Controller diagnostics ===",
-            f"OS: {platform.platform()}",
-            f"pygame-ce / SDL via pygame {pygame.version.ver}",
-            f"joysticks detected: {pygame.joystick.get_count()}",
-            "",
-        ]
-        pads = joystick_list()
-        if not pads:
-            lines.append("NO CONTROLLERS DETECTED.")
-        for idx, pad in enumerate(pads):
-            axes = [round(pad.get_axis(a), 2) for a in range(pad.get_numaxes())]
-            btns = [b for b in range(pad.get_numbuttons()) if pad.get_button(b)]
-            hats = [pad.get_hat(h) for h in range(pad.get_numhats())]
-            lines += [
-                f"[{idx}] name = {pad.get_name()!r}",
-                f"     guid={pad.get_guid()}",
-                f"     numaxes={pad.get_numaxes()} numbuttons={pad.get_numbuttons()} numhats={pad.get_numhats()}",
-                f"     axes={axes}",
-                f"     buttons pressed now = {btns}",
-                f"     hats={hats}",
-                f"     -> computed steering pad_axis() = {round(pad_axis(pad), 2)}",
-                "",
-            ]
-        return "\n".join(lines)
-
-    def write_controller_log():
-        """Save the diagnostics to a file the user can find and send back."""
-        import os as _os
-        txt = controller_report()
-        # write next to the running game; fall back to the home folder
-        for base in (_os.path.dirname(_os.path.abspath(__import__('sys').argv[0])),
-                     _os.path.expanduser("~")):
-            try:
-                path = _os.path.join(base, "controller_log.txt")
-                with open(path, "w", encoding="utf-8") as fh:
-                    fh.write(txt)
-                return path
-            except OSError:
-                continue
-        return None
-
     refresh_joysticks()
 
     # background music for the lobby (menu) and the game-over screen
@@ -518,8 +469,6 @@ def main():
     menu_index = 0
     pause_index = 0
     settings_index = 0
-    debug_saved_path = None   # where the last controller_log.txt was written
-    debug_last_btn = None     # (pad index, button) last pressed on the debug screen
     num_players = 2
     players = []
     obstacles = None
@@ -562,9 +511,6 @@ def main():
             return False
         if action == "settings":
             state = SETTINGS     # open the audio-settings submenu
-            return True
-        if action == "debug":
-            state = DEBUG        # open the controller-diagnostics screen
             return True
         start_game(action)
         state = PLAYING
@@ -654,12 +600,7 @@ def main():
                 # Xbox One S — use them to navigate menus; any other button confirms.
                 b = event.button
                 DPAD = (11, 12, 13, 14)
-                if state == DEBUG:
-                    # on the diagnostics screen, just record + save (no navigation)
-                    debug_last_btn = (getattr(event, "instance_id", "?"), b)
-                    refresh_joysticks()
-                    debug_saved_path = write_controller_log()
-                elif b in DPAD:
+                if b in DPAD:
                     if state == MENU:
                         if b == 11:
                             menu_index = (menu_index - 1) % len(MENU_ITEMS)
@@ -708,8 +649,6 @@ def main():
                         state = PLAYING      # המשך מהשהיה
                     elif state == SETTINGS:
                         state = MENU         # חזרה מתפריט ההגדרות
-                    elif state == DEBUG:
-                        state = MENU         # חזרה ממסך בדיקת השלט
                     else:                    # GAME_OVER
                         state = MENU
                 elif state == MENU:
@@ -737,10 +676,6 @@ def main():
                         pause_index = (pause_index + 1) % len(PAUSE_ITEMS)
                     elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
                         choose_pause()
-                elif state == DEBUG:
-                    if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE, pygame.K_s):
-                        refresh_joysticks()
-                        debug_saved_path = write_controller_log()
                 elif state == GAME_OVER:
                     if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_r):
                         start_game(num_players)
@@ -845,39 +780,6 @@ def main():
                 hit = pygame.Rect(0, 0, int(460 * fs), int(54 * fs))
                 hit.center = (cx, row_y)
                 settings_rects.append((hit, i))
-
-        elif state == DEBUG:
-            # Live controller diagnostics. Hebrew title + instructions, then the
-            # raw English data so the user can read / screenshot / send the log.
-            refresh_joysticks()
-            pygame.event.pump()
-            draw_center_text(screen, font_big, "בדיקת שלט",
-                             int(settings.HEIGHT * 0.10), settings.GOLD_COLOR)
-            draw_center_text(screen, font_small,
-                             "הזיזו את הסטיק/כפתורים — הנתונים מתעדכנים בזמן אמת",
-                             int(settings.HEIGHT * 0.10) + int(48 * fs),
-                             settings.TEXT_COLOR)
-            draw_center_text(screen, font_small,
-                             "לחצו כפתור בשלט (או S) לשמירת קובץ לוג • Esc לחזרה",
-                             int(settings.HEIGHT * 0.10) + int(84 * fs),
-                             settings.GOLD_COLOR)
-
-            mono = he_font(int(20 * fs))
-            y = int(settings.HEIGHT * 0.26)
-            x = int(settings.WIDTH * 0.12)
-            for raw in controller_report().split("\n"):
-                surf = mono.render(raw, True, settings.TEXT_COLOR)
-                screen.blit(surf, (x, y))
-                y += int(26 * fs)
-
-            if debug_last_btn is not None:
-                draw_center_text(screen, font_small,
-                                 f"last button: pad {debug_last_btn[0]} button {debug_last_btn[1]}",
-                                 int(settings.HEIGHT * 0.90), settings.GOLD_COLOR)
-            if debug_saved_path:
-                draw_center_text(screen, font_small,
-                                 f"saved: {debug_saved_path}",
-                                 int(settings.HEIGHT * 0.95), settings.TEXT_COLOR)
 
         elif state == PLAYING:
             elapsed += dt
